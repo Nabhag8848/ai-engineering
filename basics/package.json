@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "node --env-file=.env --import tsx index.ts"
+    "dev": "node --env-file=.env --import tsx index.ts",
+    "dev:function": "node --env-file=.env --import tsx function-calling.ts"
   },
   "keywords": [],
   "author": "",
