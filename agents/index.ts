@@ -1,4 +1,5 @@
-import { Agent, run } from "@openai/agents";
+import { Agent, run, tool } from "@openai/agents";
+import z from "zod";
 
 async function helloWorldAgent() {
   const agent = new Agent({
@@ -11,8 +12,67 @@ async function helloWorldAgent() {
   console.log(JSON.stringify(result, null, 2));
 }
 
+function mathTutorAgent() {
+  const agent = new Agent({
+    name: "Math Tutor",
+    instructions:
+      "You are Math genious, which provides solution to tuffest Math exams like JEE and NEET.",
+  });
+
+  // const result = await run(
+  //   agent,
+  //   "whats the solution of \begin{array}{l}\int_{{}}^{{}}{\frac{x-1}{{{(x+1)}^{3}}}{{e}^{x}}\ dx}\end{array}",
+  // );
+
+  // console.log(JSON.stringify(result, null, 2));
+
+  return agent;
+}
+
+function NL2SQLAgent() {
+  const get_current_date = tool({
+    name: "get_current_date",
+    description: "Give the current date",
+    parameters: z.object({}),
+    execute: () => {
+      return new Date();
+    },
+  });
+
+  const agent = new Agent({
+    name: "NL2SQL",
+    instructions:
+      "you are an SQL expert, convert natural language to the fake SQL queries assuming there is schema (core), table (user). Always use the get_current_date tool to resolve dates and substitute the actual date value in the query instead of using SQL date functions like CURRENT_DATE.",
+    tools: [get_current_date],
+  });
+
+  // const result = await run(
+  //   agent,
+  //   "How many new users signed up in our application today ? ",
+  // );
+
+  // console.log(JSON.stringify(result, null, 2));
+
+  return agent;
+}
+
+async function orchestrateAgent() {
+  const triageAgent = Agent.create({
+    name: "Traige Agent",
+    instructions:
+      "You determine which agent to use based on the user's question",
+    handoffs: [NL2SQLAgent(), mathTutorAgent()],
+  });
+
+  const result = await run(
+    triageAgent,
+    "How many new users signed up in our application today ?",
+  );
+  console.log(JSON.stringify(result, null, 2));
+}
+
 async function main() {
-  helloWorldAgent();
+  orchestrateAgent();
 }
 
 main().catch(console.error);
