@@ -4,57 +4,61 @@ This repo captures practical learnings from building with:
 
 - OpenAI-compatible Responses API patterns (`basics/`)
 - Model Context Protocol (MCP) servers (`mcp-servers/`)
+- OpenAI Agents SDK patterns (`agents/`)
 
-## What We Learned
+## What We've Learned So Far
 
-1. Use one client shape, swap providers with `baseURL`
+### Technical Understanding
 
-- In `basics/`, the OpenAI SDK is used with OpenRouter via:
-  - `baseURL: "https://openrouter.ai/api/v1"`
-  - `apiKey: process.env.OPENROUTER_API_KEY`
-- This keeps code portable while allowing model/provider flexibility.
+1. One SDK client shape can support multiple providers.
+- In `basics/`, the OpenAI SDK is configured with OpenRouter using `baseURL` + API key.
+- This keeps app code mostly provider-agnostic.
 
-2. Structured output is much more reliable with Zod
+2. Structured outputs are significantly more reliable than free-form text.
+- `responses.parse(...)` with `zodTextFormat(...)` makes outputs type-safe and predictable.
+- This avoids brittle post-processing and reduces parsing bugs.
 
-- `responses.parse(...)` + `zodTextFormat(...)` makes model output predictable.
-- Defining schemas for events, entities, or reasoning steps prevents fragile string parsing.
+3. Streaming should be handled as an event protocol.
+- We handle events like `response.output_text.delta`, `response.output_text.done`, and `response.refusal.delta`.
+- This enables responsive UIs and better error/refusal handling.
 
-3. Streaming is event-driven, not just "partial text"
+4. Tool calling is a workflow, not a single API call.
+- Define tools with strict schemas (`required`, `additionalProperties: false`, `strict: true` when possible).
+- Run the full loop: detect `function_call` -> execute function -> return `function_call_output` -> request final answer.
 
-- We handle events like:
-  - `response.output_text.delta`
-  - `response.output_text.done`
-  - `response.refusal.delta`
-- This is useful for live UX and progressive rendering.
+5. MCP servers provide clean boundaries for capabilities.
+- Calculator and weather servers expose typed tools via Zod input schemas.
+- `StdioServerTransport` is enough for local development and integration with MCP clients.
 
-4. Tool/function calling requires a full loop
+6. External API tools need defensive engineering.
+- The weather server handles non-200 responses, missing fields, empty results, and fallback messages.
+- NWS being US-only is a product constraint that must be explicit in tool behavior and docs.
 
-- Define tool schemas strictly (`additionalProperties: false`, `strict: true` when possible).
-- When a `function_call` appears:
-  - parse arguments
-  - execute local function
-  - send `function_call_output` back to the model
-- Then run a follow-up call so the model can produce the final user-facing response.
+7. Agents SDK enables multi-agent orchestration patterns.
+- A triage agent can route user queries to specialized agents (e.g., NL2SQL, Math Tutor) via handoffs.
+- Agents can also be composed as tools using `asTool()`, giving a parent agent callable sub-agents.
+- Input and output guardrails provide safety layers with fallback strategies for resilience.
 
-5. MCP tools feel like durable interfaces for LLM apps
+8. Build/runtime packaging details affect reliability.
+- TypeScript compiles to `build/`, and MCP servers run as CLI entrypoints.
+- Build scripts that set executable permissions (`chmod 755`) reduce integration friction.
 
-- Both MCP servers register tools with typed input via Zod.
-- `StdioServerTransport` is enough to run local servers and connect from MCP clients.
-- Good tool descriptions + tight schemas strongly improve behavior.
+### Non-Technical Understanding
 
-6. External API MCP tools need explicit resilience
+1. Clear contracts reduce team ambiguity.
+- Schema-first design (Zod + tool contracts) improves shared understanding between prompt design, backend logic, and client integration.
 
-- The weather server shows practical handling for:
-  - non-200 responses
-  - missing fields
-  - empty datasets
-  - user-friendly fallback messages
-- NWS coverage is US-only, so this limitation must be surfaced clearly.
+2. Constraints should be communicated early.
+- Stating limits like "US-only weather coverage" upfront avoids user confusion and support churn.
 
-7. Build and runtime details matter
+3. Iterative examples accelerate learning.
+- Small, focused experiments (`basics/` first, then MCP servers) made it easier to validate ideas before scaling complexity.
 
-- TypeScript is compiled to `build/` and executed as CLI tools.
-- MCP server `build` scripts also mark binaries executable (`chmod 755`).
+4. Reliability is also a UX decision.
+- Friendly fallback messages and explicit refusal/error paths build trust even when systems cannot fulfill a request.
+
+5. Portability is a strategic advantage.
+- Keeping provider-specific details in configuration makes future model/provider changes less risky and cheaper.
 
 ## Repository Structure
 
@@ -66,6 +70,10 @@ This repo captures practical learnings from building with:
 ├── mcp-servers/
 │   ├── calculator/           # Simple arithmetic MCP server
 │   └── weather/              # NWS-backed weather MCP server (US only)
+├── agents/
+│   ├── index.ts              # Echolalia agent, NL2SQL agent with tools, triage orchestration
+│   ├── manager.ts            # Agents-as-tools pattern (booking + refund sub-agents)
+│   └── exception.ts          # Input/output guardrails with fallback strategies
 └── README.md
 ```
 
@@ -93,6 +101,18 @@ npm run build
 cd ../weather
 npm install
 npm run build
+```
+
+### 3. Agents SDK
+
+```bash
+cd agents
+cp .env.example .env
+# add OPENAI_API_KEY to .env
+npm install
+npm run dev              # triage orchestration (handoffs)
+npm run dev:manager      # agents-as-tools pattern
+npm run dev:exception    # guardrails with fallback
 ```
 
 ## MCP Client Config Example
